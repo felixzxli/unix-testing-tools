@@ -1,0 +1,84 @@
+#!/bin/bash
+# ./produceOutputs suite-file program runs program on each test in the test suite and, for each test, creates a file that contains the output produced for each test
+
+#checks for the correct number of arguments
+if [ ${#} -ne 2 ]; then
+	echo "requires two arguments: suite.txt ./program" >&2
+	exit 1
+fi
+
+#checks for the program
+#ls "${2}" > /dev/null
+#if [ ${?} -ne 0 ]; then
+#	echo "${2} not found" >&2
+ #   exit 1
+#fi
+
+#ls -l ${2} | egrep "^(...x)" > /dev/null
+#if [ ${?} -ne 0 ]; then
+#	echo "${2} not executable" >&2
+ #   exit 1
+#fi
+
+#checks for the test suite file
+ls "${1}" > /dev/null
+if [ ${?} -ne 0 ]; then
+	echo "${1} not found!" >&2
+    exit 1
+fi
+
+ls -l ${1} | egrep "^(.r)" > /dev/null
+if [ ${?} -ne 0 ]; then
+	echo "${1} not readable" >&2
+	exit 1
+fi
+
+exit_code=0
+tests=$(cat ${1})
+for test in ${tests}; do
+	arg_input=""
+	exists_standin="false"
+	#checks if .args file exists, and is readable
+	ls ./ | egrep "${test}.args"  > /dev/null
+	if [ ${?} -eq 0 ]; then
+		ls -l ${test}.args | egrep "^(.r)" > /dev/null
+		if [ ${?} -ne 0 ]; then
+			echo "${test}.args not readable" >&2
+		    exit_code=1
+			continue
+		else 
+			arg_input=$(cat ${test}.args)
+		fi
+	fi
+	
+	#check if .in file exists
+	ls ./ | egrep "${test}.in"  > /dev/null
+	if [ ${?} -eq 0 ]; then
+		#check if .in file readable
+		ls -l ${test}.in | egrep "^(.r)" > /dev/null
+		if [ ${?} -eq 0 ]; then
+			exists_standin="true"
+		else
+			echo "${test}.in not readable" >&2
+		    exit_code=1
+			continue
+		fi
+	fi	
+
+	#checks to see if the .out file exists, then if it is writable
+	ls ./ | egrep "${test}.out" > /dev/null
+	if [ ${?} -eq 0 ]; then
+		ls -l ${test}.out | egrep "^(..w)" > /dev/null
+	 	if [ ${?} -ne 0 ]; then
+	      	exit_code=1
+			echo "${test}.out not writable" >&2
+			continue
+	    fi
+	fi
+	if [ ${exists_standin} = "true" ]; then
+		${2} ${arg_input} < ${test}.in > ${test}.out
+	else
+		${2} ${arg_input} > ${test}.out
+	fi
+done
+exit ${exit_code}

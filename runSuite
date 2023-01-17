@@ -1,0 +1,124 @@
+#!/bin/bash
+# /runSuite suite-file program runs program on each test in the test suite (as specified by suite-file) and
+# reports on any tests whose output does not match the expected output
+
+#checks for the correct # arguments
+if [ ${#} -ne 2 ]; then
+	echo "requires two arguments: suite.txt ./program" >&2
+	exit 1
+fi
+
+#checks for the program
+#ls "${2}" > /dev/null
+#if [ ${?} -ne 0 ]; then
+#	echo "${2} not found" >&2
+#    exit 1
+#fi
+
+#ls -l ${2} | egrep "^(...x)" > /dev/null
+#if [ ${?} -ne 0 ]; then
+#	echo "${2} not executable" >&2
+#    exit 1
+#fi
+
+#checks for the test suite file
+ls "${1}" > /dev/null
+if [ ${?} -ne 0 ]; then
+	echo "${1} not found!" >&2
+    exit 1
+fi
+
+ls -l ${1} | egrep "^(.r)" > /dev/null
+if [ ${?} -ne 0 ]; then
+	echo "${1} not readable" >&2
+	exit 1
+fi
+
+#run_tests(stem, program, .args_exists?, stdin_exists?)
+run_tests() {
+    arg_input=""
+    if [ ${3} = "true" ]; then
+        arg_input=$(cat ${1}.args) 
+        if [ ${4} = "true" ]; then
+            ${2} ${arg_input} < ${1}.in > ${result}
+        else  
+            ${2} ${arg_input} > ${result}
+        fi
+    elif [ ${3} = "false" ]; then
+        if [ ${4} = "true" ]; then
+            ${2} < ${1}.in > ${result}
+        else  
+            ${2} > ${result}
+        fi
+    else
+        echo "${3} is neither true nor false!" >&2
+        exit 1
+    fi 
+
+    diff ${result} ${1}.out > /dev/null
+    if [ ${?} -ne 0 ]; then
+        echo "==========================================================="
+        echo "Test failed: ${1}"
+        echo "Args:"
+        if [ ${3} = "true" ]; then
+            echo "${arg_input}"
+        fi
+        echo "Input:"
+        if [ ${4} = "true" ]; then
+            cat ${1}.in   
+        fi
+        echo "-----------------------------------------------------------"
+        echo "Expected:"
+        cat ${1}.out
+        echo "-----------------------------------------------------------"
+        echo "Actual:"
+        cat ${result}
+        echo "==========================================================="
+    fi
+}
+
+exit_code=0
+result=$(mktemp)
+tests=$(cat ${1})
+for test in ${tests}; do	
+    #make sure .out file exists and is readable
+    ls -l ${test}.out | egrep "^(.r)" > /dev/null
+    if [ ${?} -ne 0 ]; then
+		echo "File ${test}.out does not exist or is not readable" >&2
+        rm ${result}
+		exit 1
+	fi	 
+
+    standin_exists="false"
+    #check if .in file exists
+	ls ./ | egrep "${test}.in"  > /dev/null
+	if [ ${?} -eq 0 ]; then
+		ls -l ${test}.in | egrep "^(.r)" > /dev/null
+		#check if .in file readable
+		if [ ${?} -ne 0 ]; then
+			echo "${test}.in not readable" >&2
+		    exit_code=1
+			continue
+		else
+			standin_exists="true"
+		fi
+	fi	
+    
+	ls ./ | egrep "${test}.args"  > /dev/null
+    #if the .args exists
+	if [ ${?} -eq 0 ]; then
+		ls -l ${test}.args | egrep "^(.r)" > /dev/null
+        #if the .args is not readable
+		if [ ${?} -ne 0 ]; then
+			echo "File ${test}.args is not readable" >&2
+		    exit_code=1
+			continue
+		else 
+			run_tests ${test} ${2} "true" ${standin_exists} 
+		fi
+	else
+        run_tests ${test} ${2} "false" ${standin_exists} 
+	fi	
+done
+rm ${result}
+exit ${exit_code}
